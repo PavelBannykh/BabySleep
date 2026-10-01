@@ -14,6 +14,7 @@
 <link rel="icon" type="image/png" sizes="32x32" href="icons/favicon-32.png">
 <style>
   :root{
+    color-scheme:dark;
     --bg:#0b1226; --bg2:#101736; --card:#161e3f; --card2:#1c2650;
     --line:#283363; --text:#e9edfb; --muted:#9aa6cf; --dim:#6d7aa8;
     --amber:#ffc46e; --amberDark:#8a5a12;
@@ -40,6 +41,15 @@
   .status.settling .big{color:var(--blue)}
   .status.asleep .big{color:var(--green)}
   .hint{font-size:13px;color:var(--dim);margin-top:10px}
+  /* ---------- подсказка по рекомендациям ---------- */
+  .reccard{margin-top:10px;background:#181b38;border:1px solid #34301c;border-radius:14px;
+    padding:12px 14px;font-size:14px;line-height:1.5;color:var(--muted)}
+  .reccard b{color:var(--amber);font-weight:650}
+  .recrow{display:flex;gap:8px;align-items:center;margin-bottom:8px}
+  .recrow>span:first-child{width:52px;font-size:14.5px;flex:none}
+  .recrow input[type=time]{flex:1;min-width:0;background:var(--card);border:1px solid var(--line);
+    border-radius:10px;color:var(--text);font-size:16px;font-family:inherit;padding:9px 10px}
+  .recrow .collbl{flex:1;font-size:11.5px;color:var(--dim);text-align:center}
   /* ---------- buttons ---------- */
   .btn{display:block;width:100%;border:none;border-radius:16px;padding:20px 16px;
     font-size:19px;font-weight:700;font-family:inherit;cursor:pointer;user-select:none;}
@@ -337,6 +347,57 @@ function phase(){
   return { p:"settling", since:L.settle || null, s:L };
 }
 
+/* ============================== рекомендации по сну ============================== */
+function getRecs(){
+  const r = S.settings && S.settings.recs;
+  return Array.isArray(r) ? r : [];
+}
+function toTimeInput(min){
+  if (min == null) return "";
+  return pad(Math.floor(min/60)) + ":" + pad(Math.round(min%60));
+}
+function parseTimeInput(v){
+  if (!v) return null;
+  const m = v.match(/^(\d{1,2}):(\d{2})$/);
+  if (!m) return null;
+  return (+m[1])*60 + (+m[2]);
+}
+/* подсказка на главном экране: когда укладывать / когда будить */
+function recHintInner(){
+  const ph = phase();
+  if (!ph.since || !getRecs().length) return "";
+  const recs = getRecs();
+  const days = buildDays();
+  const today = days.get(dkey(new Date()));
+  const now = new Date();
+  if (ph.p === "awake"){
+    const napNo = (today ? today.naps.length : 0) + 1;
+    const rec = recs[napNo - 1];
+    if (!rec || !rec.wb) return "";
+    if (now.getHours()*60 + now.getMinutes() >= 17*60+30) return ""; // вечер — дальше ночной сон
+    const target = new Date(new Date(ph.since).getTime() + rec.wb*60000);
+    const rem = Math.round((target - now)/60000);
+    const left = rem > 0
+      ? "через <b>" + fmtDur(rem) + "</b>"
+      : "<b>пора укладывать</b> (ВБ уже " + elapsed(ph.since) + ")";
+    const maxNap = rec.maxNap ? " · сон до " + fmtDur(rec.maxNap) : "";
+    return `📋 Сон ${napNo}: начните укладывать в <b>${fmtHM(target)}</b> (${left}) — рекомендация: ВБ ${fmtDur(rec.wb)}${maxNap}`;
+  }
+  if (ph.p === "asleep"){
+    if (classify(ph.s) !== "nap") return "";
+    const napNo = today ? today.naps.length : 0; // текущий сон — последний в списке дня
+    const rec = recs[napNo - 1];
+    if (!rec || !rec.maxNap) return "";
+    const target = new Date(new Date(ph.since).getTime() + rec.maxNap*60000);
+    const rem = Math.round((target - now)/60000);
+    const left = rem > 0
+      ? `разбудить не позже <b>${fmtHM(target)}</b> (осталось <b>${fmtDur(rem)}</b>)`
+      : `<b>пора будить</b> — лимит превышен на <b>${fmtDur(Math.abs(rem))}</b>`;
+    return `⏰ Сон ${napNo}: ${left} — рекомендация: сон до ${fmtDur(rec.maxNap)}`;
+  }
+  return "";
+}
+
 /* ============================== действия ============================== */
 function actStartSettle(){
   S.sessions.push({ id:uid(), settle:new Date().toISOString(), asleep:null, wake:null, kind:"auto", note:"" });
@@ -390,8 +451,15 @@ function renderHome(){
   }
 
   const list = renderTimeline();
+  let hint = "";
+  if (ph.p === "awake" || ph.p === "asleep"){
+    const inner = recHintInner();
+    if (inner) hint = `<div class="reccard" id="recHint">${inner}</div>`;
+    else if (ph.p === "awake" && !getRecs().length)
+      hint = `<div class="reccard" id="recHint">💡 Задайте рекомендуемые времена на вкладке «Ещё» — приложение будет подсказывать, когда укладывать и когда будить</div>`;
+  }
   return `<h1>Дневник сна</h1>
-    ${card}${action}${links}
+    ${card}${hint}${action}${links}
     <h2>Последние записи</h2>${list}
     <div style="text-align:center"><button class="linkbtn" data-act="add">＋ Добавить запись вручную</button></div>`;
 }
@@ -498,7 +566,22 @@ function dayCard(r){
 
 /* ============================== вкладка «Ещё» ============================== */
 function renderMore(){
+  const recs = getRecs();
+  let recRows = `<div class="recrow"><span></span><span class="collbl">ВБ до укладывания</span><span class="collbl">макс. сон</span></div>`;
+  for (let i = 1; i <= 5; i++){
+    const r = recs[i-1] || {};
+    recRows += `<div class="recrow"><span>Сон ${i}</span>
+      <input type="time" id="rec_wb_${i}" value="${toTimeInput(r.wb)}">
+      <input type="time" id="rec_max_${i}" value="${toTimeInput(r.maxNap)}"></div>`;
+  }
   return `<h1>Ещё</h1><div class="settings">
+    <div class="item"><h3>📋 Рекомендации по сну</h3>
+      <p>Рекомендуемое время бодрствования до укладывания и максимальная длительность каждого
+      дневного сна. Пока ребёнок бодрствует, приложение покажет, когда начинать укладывать;
+      пока спит — к какому времени разбудить. Пустое поле — подсказки для этого сна не будет.</p>
+      ${recRows}
+      <button class="btn ghost" data-act="saverecs">Сохранить рекомендации</button>
+    </div>
     <div class="item"><h3>💾 Резервная копия</h3>
       <p>Все данные хранятся только в этом приложении на этом iPhone. Если удалить приложение
       с экрана «Домой» или очистить данные сайтов в Safari, записи пропадут — делайте копию
@@ -516,7 +599,7 @@ function renderMore(){
       Время бодрствования (ВБ) считается от пробуждения до начала укладывания.
       Дневной сон — сны до вечернего укладывания; всё, что началось после 17:30, считается ночным сном.
       Если ночью ребёнок проснулся — отметьте «Начали укладывать → Уснул», пробуждение попадёт в статистику.<br><br>
-      Версия 1.1 · данные не покидают телефон.</p>
+      Версия 1.2 · данные не покидают телефон.</p>
     </div></div>`;
 }
 
@@ -645,6 +728,18 @@ document.getElementById("view").addEventListener("click", e=>{
   else if (a === "wake") actWokeUp();
   else if (a === "cancel"){ if (confirm("Отменить укладывание? Отметка будет удалена.")) actCancelSettle(); }
   else if (a === "add"){ openEdit(null); return; }
+  else if (a === "saverecs"){
+    const recs = [];
+    for (let i = 1; i <= 5; i++){
+      recs.push({
+        wb: parseTimeInput(document.getElementById("rec_wb_" + i).value),
+        maxNap: parseTimeInput(document.getElementById("rec_max_" + i).value)
+      });
+    }
+    if (!S.settings) S.settings = {};
+    S.settings.recs = recs;
+    save(); toast("Рекомендации сохранены");
+  }
   else if (a === "export") return doExport();
   else if (a === "import"){ document.getElementById("importFile").click(); return; }
   else if (a === "clear"){
@@ -665,12 +760,14 @@ document.getElementById("overlay").addEventListener("click", e=>{
   if (e.target.id === "overlay") closeEdit();
 });
 
-/* тикающие таймеры на главном экране */
+/* тикающие таймеры и подсказки на главном экране */
 setInterval(()=>{
   if (tab !== "home") return;
   const el = document.getElementById("elapsed");
   const ph = phase();
   if (el && ph.since) el.textContent = elapsed(ph.since);
+  const rh = document.getElementById("recHint");
+  if (rh && getRecs().length) rh.innerHTML = recHintInner();
 }, 1000);
 
 /* скрытый помощник для тестирования: window.__demo() */
