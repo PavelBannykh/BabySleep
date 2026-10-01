@@ -1,0 +1,33 @@
+{
+ "app": "goodsleep",
+ "version": 1,
+ "exportedAt": "2026-10-01T10:29:06.081Z",
+ "data": {
+  "sessions": [
+   {
+    "id": "mupdr86mm757e",
+    "settle": "2026-10-01T08:55:00.000Z",
+    "asleep": "2026-10-01T09:13:00.000Z",
+    "wake": null,
+    "kind": "auto",
+    "note": ""
+   },
+   {
+    "id": "mupdyssp3lwdi",
+    "settle": "2026-10-01T04:30:00.000Z",
+    "asleep": "2026-10-01T05:00:00.000Z",
+    "wake": "2026-10-01T06:40:00.000Z",
+    "kind": "auto",
+    "note": ""
+   },
+   {
+    "id": "mupe07n22gau3",
+    "settle": "2026-09-30T14:30:00.000Z",
+    "asleep": "2026-09-30T15:00:00.000Z",
+    "wake": "2026-10-01T02:15:00.000Z",
+    "kind": "auto",
+    "note": ""
+   }
+  ]
+ }
+}

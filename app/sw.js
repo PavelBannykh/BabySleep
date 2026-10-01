@@ -1,5 +1,5 @@
 /* Дневник сна — service worker: офлайн-кэш оболочки приложения */
-const CACHE = "goodsleep-v1.0.1";
+const CACHE = "goodsleep-v1.1.0";
 const ASSETS = [
   "./",
   "./index.html",

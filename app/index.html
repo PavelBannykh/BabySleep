@@ -305,16 +305,18 @@ function dayStats(d){
   let prevWake = d.morningWake;
   for (const s of d.naps){
     const wb = diffMin(prevWake, startOf(s));
+    const wbFull = diffMin(prevWake, s.asleep);
     const fall = diffMin(s.settle, s.asleep);
     const dur = diffMin(s.asleep, s.wake);
     if (s.asleep && prevWake) r.awakeTotal += diffMin(prevWake, s.asleep);
-    r.naps.push({ s, wb, fall, dur, wake: s.wake, settle: s.settle, asleep: s.asleep });
+    r.naps.push({ s, wb, wbFull, fall, dur, wake: s.wake, settle: s.settle, asleep: s.asleep });
     if (s.wake) prevWake = s.wake;
     if (dur != null) r.daySleep += dur;
   }
   if (d.block){
     const nb = d.block.segments[0];
     r.wbBeforeNight = diffMin(prevWake, startOf(nb));
+    r.wbBeforeNightFull = diffMin(prevWake, nb.asleep);
     for (const seg of d.block.segments){
       if (seg.asleep && prevWake) r.awakeTotal += diffMin(prevWake, seg.asleep);
       if (seg.wake) prevWake = seg.wake;
@@ -417,8 +419,9 @@ function renderTimeline(){
       if (mw) prevWake = mw;
     }
     const wb = diffMin(prevWake, startOf(s));
+    const wbFull = diffMin(prevWake, s.asleep);
     const wbHtml = (i > 0 && wb != null)
-      ? `<div class="ww">бодрствование <b>${fmtDur(wb)}</b></div>` : "";
+      ? `<div class="ww">бодрствование <b>${fmtDur(wb)}</b>${(s.settle && wbFull != null) ? ` · до засыпания <b>${fmtDur(wbFull)}</b>` : ""}</div>` : "";
     html += wbHtml + sessionCard(s);
   }
   return html;
@@ -470,6 +473,7 @@ function dayCard(r){
   html += row("Подъём", r.morningWake ? fmtHM(new Date(r.morningWake)) : "—");
   r.naps.forEach((n, i) => {
     html += row(`ВБ перед сном ${i+1}`, n.wb != null ? fmtDur(n.wb) : "—");
+    html += row(`ВБ до засыпания ${i+1}`, n.wbFull != null ? fmtDur(n.wbFull) : "—");
     html += row(`Сон ${i+1}: начали укладывать`, n.settle ? fmtHM(new Date(n.settle)) : (n.asleep ? "сразу уснул" : "—"));
     html += row(`Сон ${i+1}: укладывали`, n.fall != null ? fmtMin(n.fall) : "—");
     html += row(`Сон ${i+1}: количество сна`, n.dur != null ? fmtDur(n.dur) : "идёт →");
@@ -477,6 +481,7 @@ function dayCard(r){
   });
   if (r.night){
     html += row("ВБ перед ночным сном", r.wbBeforeNight != null ? fmtDur(r.wbBeforeNight) : "—");
+    html += row("ВБ до засыпания (ночь)", r.wbBeforeNightFull != null ? fmtDur(r.wbBeforeNightFull) : "—");
     html += row("Ночной: начали укладывать", r.night.settle ? fmtHM(new Date(r.night.settle)) : "—");
     html += row("Ночной: укладывали", r.night.fallMins != null ? fmtMin(r.night.fallMins) : "—");
     html += row("Начало сна", r.night.asleep ? fmtHM(new Date(r.night.asleep)) : "—");
@@ -511,7 +516,7 @@ function renderMore(){
       Время бодрствования (ВБ) считается от пробуждения до начала укладывания.
       Дневной сон — сны до вечернего укладывания; всё, что началось после 17:30, считается ночным сном.
       Если ночью ребёнок проснулся — отметьте «Начали укладывать → Уснул», пробуждение попадёт в статистику.<br><br>
-      Версия 1.0 · данные не покидают телефон.</p>
+      Версия 1.1 · данные не покидают телефон.</p>
     </div></div>`;
 }
 
